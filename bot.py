@@ -58,7 +58,7 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
         # Parsing failed
         embed = Embed(title="Parsing Error", color=0xFF0000)
         embed.description = f"Unable to parse the time phrase: '{time_phrase}'"
-        await ctx.response.send_message(embed=embed, ephemeral=True, delete_after=15)
+        await ctx.response.send_message(embed=embed, ephemeral=True)
         return
     
     dt = datetime(*time_struct[:6])
@@ -81,7 +81,7 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
         
     response = f"<t:{unix_timestamp}:{formatting_mark}>"
     
-    await ctx.response.send_message(response, silent=True, delete_after=60)
+    await ctx.response.send_message(response, silent=True)
 
 @client.event
 async def on_ready():
