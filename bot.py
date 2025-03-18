@@ -32,8 +32,7 @@ def set_user_timezone(user_id, timezone):
     conn.commit()
 
 @tree.command(name="timestamp",
-              description="Convert human-readable time to timestamp",
-              guild=discord.Object(id="883091779535126529"))
+              description="Convert human-readable time to timestamp")
 @app_commands.describe(
     time_phrase="Human-readable time (e.g. 'in 30 minutes')",
     timezone= "Optional timezone override (saves for future use)"
@@ -85,14 +84,14 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
 
 @client.event
 async def on_ready():
-    await tree.sync(guild=discord.Object(id="883091779535126529"))
     # print "ready" in the console when the bot is ready to work
+    await tree.sync()
     print("ready")
 
 
 secret = os.getenv("BOT_SECRET")
 if not secret:
-    raise ValueError("BOT_SECRET environment variable not set")
+    raise ValueError("BOT_SECRET environment variable not set in .env!")
 
 client.run(secret)
 
