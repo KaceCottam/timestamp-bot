@@ -101,7 +101,6 @@ async def sync(ctx: Interaction):
 @client.event
 async def on_ready():
     # print "ready" in the console when the bot is ready to work
-    await tree.sync(guild=discord.Object(id=883091779535126529))
     print("ready")
 
 
