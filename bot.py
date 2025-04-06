@@ -86,9 +86,13 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str | None = 
     
     await ctx.response.send_message(response, silent=True)
 
-@tree.command(name="sync", description="Owner only")
-@app_commands.check(lambda i: i.user.id == 1358574053945901146)
+@tree.command(name="sync", description="Owner only", guild=discord.Object(id=883091779535126529))
 async def sync(ctx: Interaction):
+    if ctx.user.id != 97821722517962752:
+        embed = Embed(title="Permission Denied", color=0xFF0000)
+        embed.description = "You do not have permission to use this command."
+        await ctx.response.send_message(embed=embed, ephemeral=True)
+        return
     await tree.sync()
     embed = Embed(title="Sync", color=0x00FF00)
     embed.description = "Command tree synced successfully!"
@@ -97,6 +101,7 @@ async def sync(ctx: Interaction):
 @client.event
 async def on_ready():
     # print "ready" in the console when the bot is ready to work
+    await tree.sync(guild=discord.Object(id=883091779535126529))
     print("ready")
 
 
