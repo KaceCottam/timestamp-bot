@@ -87,9 +87,8 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str | None = 
     await ctx.response.send_message(response, silent=True)
 
 @tree.command(name="sync", description="Owner only")
-@app_commands.is_owner()
+@app_commands.check(lambda i: i.user.id == 1358574053945901146)
 async def sync(ctx: Interaction):
-    # Sync the command tree
     await tree.sync()
     embed = Embed(title="Sync", color=0x00FF00)
     embed.description = "Command tree synced successfully!"
