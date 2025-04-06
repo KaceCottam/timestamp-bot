@@ -35,14 +35,21 @@ def set_user_timezone(user_id, timezone):
               description="Convert human-readable time to timestamp")
 @app_commands.describe(
     time_phrase="Human-readable time (e.g. 'in 30 minutes')",
-    timezone= "Optional timezone override (saves for future use)"
+    timezone= "Optional timezone override (saves for future use)",
+    timestamp_format="Format of the timestamp (default: 'R' for relative, 't' for short, 'f' for long)"
 )
 @app_commands.choices(timezone=[
     discord.app_commands.Choice(name="PST", value="US/Pacific"),
     discord.app_commands.Choice(name="CST", value="US/Central"),
     discord.app_commands.Choice(name="EST", value="US/Eastern")
-])
-async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
+    ],
+    timestamp_format=[
+        discord.app_commands.Choice(name="Relative (in X minutes)", value="R"),
+        discord.app_commands.Choice(name="Short (X:XX am/pm)", value="t"),
+        discord.app_commands.Choice(name="Long (Month X, XXXX at XX:XX am/pm)", value="f")
+    ]
+)
+async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str | None = None, timestamp_format: str | None = None):
     # Get or set timezone
     if timezone:
         set_user_timezone(ctx.user.id, timezone)
@@ -51,7 +58,7 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
     
     # Parse time
     cal = Calendar()
-    time_struct, parse_status = cal.parse(time_phrase)
+    parsed_date, parse_status = cal.parseDT(datetimeString=time_phrase, sourceTime=datetime.now(tz=tz), tzinfo=tz)
     
     if parse_status == 0:
         # Parsing failed
@@ -60,11 +67,8 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
         await ctx.response.send_message(embed=embed, ephemeral=True)
         return
     
-    dt = datetime(*time_struct[:6])
-    localized_dt = tz.localize(dt)
-    
     # Format response
-    unix_timestamp = int(localized_dt.timestamp())
+    unix_timestamp = int(parsed_date.timestamp())
 
     def pick_formatting_mark(dt):
         now = datetime.now(tz)
@@ -76,7 +80,7 @@ async def _timestamp(ctx: Interaction, time_phrase: str, timezone: str = None):
         else:
             return 'f'
 
-    formatting_mark = pick_formatting_mark(localized_dt)
+    formatting_mark = pick_formatting_mark(parsed_date) if timestamp_format is None else timestamp_format
         
     response = f"<t:{unix_timestamp}:{formatting_mark}>"
     
