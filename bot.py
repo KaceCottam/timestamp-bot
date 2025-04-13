@@ -74,30 +74,49 @@ def to_timestamp(dt: datetime, flag: pdtContext, adjust_timedelta: bool) -> str:
 
     return f"<t:{linux_time}:{format_mark}>"
 
-def construct_string(message: str, nlp_result: list[tuple[datetime, int, int, int, str]]) -> str:
+def parse_string(message: str, cal: Calendar, tz: pytz.timezone) -> str:
+    """
+    Parse the string, replace times and dates with Discord timestamps, and handle timezones.
+    """
+    result = cal.nlp(message, sourceTime=datetime.now(tz=tz), version=VERSION_CONTEXT_STYLE)
+    if not result:
+        return message
+
+    result: list[tuple[datetime, int, int, int, str]] = [*result]
+    # Update the result with timezone adjustments
+    new_result = []
+    for dt, flag, offset_start, offset_end, matched_text in result:
+        words = message[offset_end:].split()
+        words.append(None)  # Avoid index out of range
+        if words[0] in TIMEZONE_MAP:
+            tz = pytz.timezone(TIMEZONE_MAP[words[0]])
+            offset_end += len(words[0]) + 1
+            matched_text = matched_text + " " + words[0]
+            dt = tz.localize(dt)
+            new_result.append((dt, flag, offset_start, offset_end, matched_text))
+        else:
+            new_result.append((dt, flag, offset_start, offset_end, matched_text))
+
+    result = new_result
+
+    # Adjust datetime objects to the user's timezone
+    for i, (dt, *_) in enumerate(result):
+        dt = tz.localize(dt) if dt.tzinfo is None else dt.astimezone(tz)
+        result[i] = (dt.astimezone(BOT_TIMEZONE), *result[i][1:])
+
     # Construct the string to send
     accumulator: str = ""
     last_offset = 0
-    if not nlp_result:
-        return message
-    
-    last_flag = None
-    for (dt, flag, offset_start, offset_end, matched_text) in nlp_result:
+    for (dt, flag, offset_start, offset_end, matched_text) in result:
         accumulator += message[last_offset:offset_start]
         last_offset = offset_end
-        # convert the datetime to a timestamp string
         timestamp_str = to_timestamp(dt, flag, 'am' not in matched_text.lower() and 'pm' not in matched_text.lower())
-        # sometimes the matched text grabs extra whitespace characters on the ends
-        # so we need to keep those whitespace characters
         prefix = matched_text[:len(matched_text) - len(matched_text.lstrip())]
         suffix = matched_text[len(matched_text.rstrip()):]
-
         accumulator += prefix + timestamp_str + suffix
     accumulator += message[last_offset:]
     return accumulator
 
-# now let us have a command `timestamp` that takes a message.
-# it uses parsedatetime.Calendar.nlp to parse the message.
 BOT_TIMEZONE = pytz.timezone("US/Pacific")
 
 TIMEZONE_MAP = {
@@ -110,61 +129,64 @@ TIMEZONE_MAP = {
 @tree.command(name="timestamp", description="Send a message and replace times and dates with a discord timestamp.")
 @app_commands.describe(message="Message to parse")
 async def timestamp(ctx: Interaction, message: str):
-    # we will parse the message using parsedatetime.Calendar.nlp
-    embed = Embed()
-    embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.avatar.url)
-    embed.set_footer(text=f"Timezone: {get_user_timezone(ctx.user.id)}")
+    await ctx.response.defer(ephemeral=True)
     cal = Calendar(version=VERSION_CONTEXT_STYLE)
     user_tz = get_user_timezone(ctx.user.id)
     tz = pytz.timezone(user_tz)
-    result: list[tuple[datetime, int, int, int, str]] = [*cal.nlp(message, sourceTime=datetime.now(tz=tz), version=VERSION_CONTEXT_STYLE)]
-    # if result is None, we will just write the message. There is no error.
-    if result is None:
-        embed.description = message
-        await ctx.response.send_message(embeds=[embed])
-        return
     
-    # we need to update the result 
-    new_result = []
-    for dt, flag, offset_start, offset_end, matched_text in result:
-        # we need to check the next word in the message to see if it is a timezone
-        # if it is, we need to set the timezone to that timezone
-        words = message[offset_end:].split()
-        words.append(None) # to avoid index out of range
-        if words[0] in TIMEZONE_MAP:
-            # set the timezone to that timezone
-            tz = pytz.timezone(TIMEZONE_MAP[words[0]])
-            # remove the timezone from the message
-            offset_end += len(words[0]) + 1
-            matched_text = matched_text + " " + words[0]
+    # Use parse_string to process the message
+    parsed_message = parse_string(message, cal, tz)
+    
+    # Create a temporary webhook
+    webhook = await ctx.channel.create_webhook(name="Timestamp Bot")
+    try:
+        await webhook.send(
+            content=parsed_message + f"\n-# Sent by {client.user.display_name}. User's timezone: {user_tz}",
+            username=ctx.user.display_name,
+            avatar_url=ctx.user.display_avatar.url,
+        )
+    finally:
+        await webhook.delete()
+        await ctx.followup.send(
+            content="Message sent as you!",
+            ephemeral=True
+        )
 
-            dt = tz.localize(dt)
-            new_result.append((dt, flag, offset_start, offset_end, matched_text))
-        else:
-            # if the timezone is not in the message, we will just add the result
-            new_result.append((dt, flag, offset_start, offset_end, matched_text))
-
-    result = new_result
-
-    # we will have to adjust the datetime objects to the user's timezone
-    for i, (dt, *_) in enumerate(result):
-        # convert the datetime to the user's timezone
-        dt = tz.localize(dt) if dt.tzinfo is None else dt.astimezone(tz)
-        result[i] = (dt.astimezone(BOT_TIMEZONE), *result[i][1:])
-
-    message = construct_string(message, result)
-    embed.description = message
-    await ctx.response.send_message(embeds=[embed])
+@tree.context_menu(name="Send Timestamp")
+async def send_timestamp(ctx: Interaction, message: discord.Message):
+    await ctx.response.defer(ephemeral=True)
+    cal = Calendar(version=VERSION_CONTEXT_STYLE)
+    sender_tz = get_user_timezone(message.author.id)  # Get the sender's timezone
+    tz = pytz.timezone(sender_tz)
+    
+    # Use parse_string to process the message content
+    parsed_message = parse_string(message.content, cal, tz)
+    
+    # Create a temporary webhook
+    webhook = await ctx.channel.create_webhook(name="Timestamp Bot")
+    try:
+        await webhook.send(
+            content=parsed_message + f"\n-# Sent by {client.user.display_name}. Sender's timezone: {sender_tz}",
+            username=message.author.display_name,
+            avatar_url=message.author.display_avatar.url,
+            files=message.attachments,
+        )
+    finally:
+        await webhook.delete()
+        await ctx.followup.send(
+            content="Message sent as sender!",
+            ephemeral=True
+        )
 
 @tree.command(name="sync", description="Owner only", guild=discord.Object(id=883091779535126529))
 @app_commands.describe(guild="Sync commands in this guild")
 async def sync(ctx: Interaction, guild: str | None = None):
+    await ctx.response.defer()
     if ctx.user.id != 97821722517962752:
         embed = Embed(title="Permission Denied", color=0xFF0000)
         embed.description = "You do not have permission to use this command."
-        await ctx.response.send_message(embed=embed, ephemeral=True)
+        await ctx.followup.send(embed=embed, ephemeral=True)
         return
-    # await ctx.response.defer()
     if guild is not None:
         # Sync commands in this guild
         synced_commands = await tree.sync(guild=discord.Object(id=int(guild)))
@@ -173,11 +195,11 @@ async def sync(ctx: Interaction, guild: str | None = None):
     embed = Embed(title="Sync", color=0x00FF00)
     embed.description = "Command tree synced successfully!"
     embed.add_field(name="Synced Commands", value="\n".join([f"/{command.name}" for command in synced_commands]), inline=False)
-    await ctx.response.send_message(embed=embed, ephemeral=True)
+    await ctx.followup.send(embed=embed, ephemeral=True)
 
 @client.event
 async def on_ready():
-    # print "ready" in the console when the bot is ready to work
+    # Sync the command tree when the bot is ready
     print("ready")
 
 
