@@ -137,39 +137,17 @@ async def timestamp(ctx: Interaction, message: str):
     # Use parse_string to process the message
     parsed_message = parse_string(message, cal, tz)
     
-    # Create a temporary webhook
+    # Respond with an embed
     try:
-        webhook = await ctx.channel.create_webhook(name="Timestamp Bot")
-    except discord.Forbidden:
-        await ctx.followup.send(
-            content="Failed to create a webhook. Missing permissions.",
-            ephemeral=True
-        )
-        return
-    except Exception as e:
-        await ctx.followup.send(
-            content=f"Failed to create a webhook: {str(e)}",
-            ephemeral=True
-        )
-        return
-
-    try:
-        await webhook.send(
-            content=parsed_message + f"\n-# Sent by {client.user.display_name}. User's timezone: {user_tz}",
-            username=ctx.user.display_name,
-            avatar_url=ctx.user.display_avatar.url,
-        )
-        await ctx.followup.send(
-            content="Message sent as you!",
-            ephemeral=True
-        )
+        embed = Embed(description=parsed_message, color=0x00FF00)
+        embed.set_author(name=ctx.user.display_name, icon_url=ctx.user.display_avatar.url)
+        embed.set_footer(text=f"User's timezone: {user_tz}")
+        await ctx.followup.send(embed=embed, ephemeral=False)
     except Exception as e:
         await ctx.followup.send(
             content=f"Failed to send the message: {str(e)}",
             ephemeral=True
         )
-    finally:
-        await webhook.delete()
 
 @tree.context_menu(name="Send Timestamp")
 async def send_timestamp(ctx: Interaction, message: discord.Message):
@@ -181,40 +159,17 @@ async def send_timestamp(ctx: Interaction, message: discord.Message):
     # Use parse_string to process the message content
     parsed_message = parse_string(message.content, cal, tz)
     
-    # Create a temporary webhook
+    # Respond with an embed
     try:
-        webhook = await ctx.channel.create_webhook(name="Timestamp Bot")
-    except discord.Forbidden:
-        await ctx.followup.send(
-            content="Failed to create a webhook. Missing permissions.",
-            ephemeral=True
-        )
-        return
-    except Exception as e:
-        await ctx.followup.send(
-            content=f"Failed to create a webhook: {str(e)}",
-            ephemeral=True
-        )
-        return
-
-    try:
-        await webhook.send(
-            content=parsed_message + f"\n-# Sent by {client.user.display_name}. Sender's timezone: {sender_tz}",
-            username=message.author.display_name,
-            avatar_url=message.author.display_avatar.url,
-            files=message.attachments,
-        )
-        await ctx.followup.send(
-            content="Message sent as sender!",
-            ephemeral=True
-        )
+        embed = Embed(description=parsed_message, color=0x00FF00)
+        embed.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
+        embed.set_footer(text=f"Sender's timezone: {sender_tz}")
+        await ctx.followup.send(embed=embed, ephemeral=False)
     except Exception as e:
         await ctx.followup.send(
             content=f"Failed to send the message: {str(e)}",
             ephemeral=True
         )
-    finally:
-        await webhook.delete()
 
 @tree.command(name="sync", description="Owner only", guild=discord.Object(id=883091779535126529))
 @app_commands.describe(guild="Sync commands in this guild")
