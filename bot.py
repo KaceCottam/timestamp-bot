@@ -88,7 +88,7 @@ def parse_string(message: str, cal: Calendar, tz: pytz.timezone) -> str:
     for dt, flag, offset_start, offset_end, matched_text in result:
         words = message[offset_end:].split()
         words.append(None)  # Avoid index out of range
-        if words[0] in TIMEZONE_MAP:
+        if words[0].upper() in TIMEZONE_MAP:
             tz = pytz.timezone(TIMEZONE_MAP[words[0]])
             offset_end += len(words[0]) + 1
             matched_text = matched_text + " " + words[0]
