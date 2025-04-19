@@ -129,7 +129,7 @@ TIMEZONE_MAP = {
 @tree.command(name="timestamp", description="Send a message and replace times and dates with a discord timestamp.")
 @app_commands.describe(message="Message to parse")
 async def timestamp(ctx: Interaction, message: str):
-    await ctx.response.defer(ephemeral=True)
+    await ctx.response.defer(ephemeral=False)  # Make the response non-ephemeral
     cal = Calendar(version=VERSION_CONTEXT_STYLE)
     user_tz = get_user_timezone(ctx.user.id)
     tz = pytz.timezone(user_tz)
@@ -151,7 +151,7 @@ async def timestamp(ctx: Interaction, message: str):
 
 @tree.context_menu(name="Send Timestamp")
 async def send_timestamp(ctx: Interaction, message: discord.Message):
-    await ctx.response.defer(ephemeral=True)
+    await ctx.response.defer(ephemeral=False)  # Make the response non-ephemeral
     cal = Calendar(version=VERSION_CONTEXT_STYLE)
     sender_tz = get_user_timezone(message.author.id)  # Get the sender's timezone
     tz = pytz.timezone(sender_tz)
