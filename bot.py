@@ -82,23 +82,54 @@ def parse_string(message: str, cal: Calendar, tz: pytz.timezone) -> str:
     if not result:
         return message
 
-    result: list[tuple[datetime, int, int, int, str]] = [*result]
+    result: list[tuple[datetime, pdtContext, int, int, str, str | None]] = [*result]
     # Update the result with timezone adjustments
     new_result = []
     for dt, flag, offset_start, offset_end, matched_text in result:
         words = message[offset_end:].split()
-        words.append(None)  # Avoid index out of range
+        words.append('')  # Avoid index out of range
         if words[0].upper() in TIMEZONE_MAP:
             tz = pytz.timezone(TIMEZONE_MAP[words[0].upper()])
             offset_end += len(words[0]) + 1
             matched_text = matched_text + " " + words[0]
             dt = tz.localize(dt)
-            new_result.append((dt, flag, offset_start, offset_end, matched_text))
+            new_result.append((dt, flag, offset_start, offset_end, matched_text, TIMEZONE_MAP[words[0].upper()]))
         else:
-            new_result.append((dt, flag, offset_start, offset_end, matched_text))
-
+            new_result.append((dt, flag, offset_start, offset_end, matched_text, None))
+    
     result = new_result
 
+    new_result = []
+
+    # because of the above, we may be able to join some of the results together
+    combined_previous = False
+    for result1, result2 in zip(result, result[1:]):
+        dt1, flag1, offset_start1, offset_end1, _, override_timezone1 = result1
+        dt2, flag2, offset_start2, offset_end2, _, override_timezone2 = result2
+        if not message[offset_end1:offset_start2].isspace() and not (override_timezone1 and override_timezone2):
+            # skip if the flags are the same
+            # skip if there is text in between the words
+            new_result.append(result1)
+            combined_previous = False
+            continue 
+        combined_previous = True
+        dt_time = dt1.time() if flag1.ACU_HOUR else dt2.time()
+        dt_date = dt2.date() if flag1.ACU_HOUR else dt1.date()
+        dt = datetime.combine(date=dt_date, time=dt_time, tzinfo=dt1.tzinfo or dt2.tzinfo)
+        if override_timezone1 or override_timezone2:
+            dt = dt.replace(tzinfo=dt1.tzinfo if override_timezone1 else dt2.tzinfo)
+        flag = pdtContext(flag1.accuracy | flag2.accuracy)
+        offset_start = offset_start1
+        offset_end = offset_end2
+        matched_text = message[offset_start:offset_end]
+        new_result.append((dt, flag, offset_start, offset_end, matched_text, override_timezone1 or override_timezone2))
+    
+    if not combined_previous:
+        # if the last result was not combined, add it to the new result
+        new_result.append(result[-1])
+
+    result = new_result
+           
     # Adjust datetime objects to the user's timezone
     for i, (dt, *_) in enumerate(result):
         dt = tz.localize(dt) if dt.tzinfo is None else dt.astimezone(tz)
@@ -107,7 +138,7 @@ def parse_string(message: str, cal: Calendar, tz: pytz.timezone) -> str:
     # Construct the string to send
     accumulator: str = ""
     last_offset = 0
-    for (dt, flag, offset_start, offset_end, matched_text) in result:
+    for (dt, flag, offset_start, offset_end, matched_text, _) in result:
         accumulator += message[last_offset:offset_start]
         last_offset = offset_end
         timestamp_str = to_timestamp(dt, flag, 'am' not in matched_text.lower() and 'pm' not in matched_text.lower())
